@@ -32,6 +32,7 @@ The key design choice: **the LLM never sits between your data and the report.** 
 | Hallucinated data | Collectors are deterministic code. Raw backend text goes straight to the report prompt. |
 | Slow or broken backend | Per-source 5s timeout. Failures become `UNAVAILABLE: do not infer`, and the report lowers its confidence. |
 | Unknown service | Validated against a registry in code. No backend calls, severity `UNKNOWN`, asks for manual check. |
+| Missing evidence | Code counts how many sources returned data and caps the report's confidence (3 sources: HIGH, 2: MEDIUM, 1: LOW, 0: triage not possible). The report prompt is told the cap, and a final code step always appends a `WARNING` when evidence is incomplete, whatever the model wrote. |
 | Unverifiable claims | Every claim must cite `(logs)`, `(metrics)` or `(changes)`. |
 | Prompt injection via log text | Evidence is capped at 4000 chars and labelled as data to ignore instructions in. |
 | Determinism | `temperature = 0` on both LLM agents. |
@@ -103,6 +104,18 @@ Wait 10-20 seconds. You will see the intake result, the three evidence collector
   export GEMINI_MODEL=gemini-flash-latest
   gradle run --console=plain
   ```
+
+## Human approval demo (`@Tool` + `requireConfirmation`)
+
+`Actions.kt` has one tool that changes something, `rollbackService`, marked `@Tool(requireConfirmation = true)`. ADK pauses until a person approves. It runs in its own small agent:
+
+```bash
+gradle run --args="--rollback" --console=plain
+```
+
+Then type `Roll back checkout-api to v2.14.2`. Answer `yes` and the agent confirms the rollback started; answer `no` and nothing runs. The tool still validates the service and version in code after approval.
+
+It is a separate agent on purpose: in the simple terminal runner, approving a call inside a multi-step workflow made the earlier steps run again. The rollback is a mock that only returns a "rollback started" result.
 
 ## HTTP mode (for a pager webhook)
 
